@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.venv/
+.venv313/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
