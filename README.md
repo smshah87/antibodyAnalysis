@@ -667,6 +667,17 @@ experiment's own summary instead of a per-experiment difference.
   intensity under-calls/has weak separation because punctate signal gets
   diluted by background between puncta. `Dot_Density` was the only option
   with both strong separation and a plausible call rate.
+- **Update (2026-11-19): a newer/better DLL3 antibody calls cleanly on plain
+  `Cytoplasm: Channel N: Mean` intensity -- this does NOT contradict the
+  `Dot_Density` finding above.** `Dot_Density` was a fix for a specific
+  antibody's weak, sparse, punctate signal, where mean intensity got diluted
+  by background between dots. A stronger/cleaner antibody lot doesn't have
+  that problem, so simple Mean intensity gives a real bimodal GMM split
+  without the dot-density workaround. Don't default to either method
+  blindly for a new DLL3 dataset: check the GMM separation for Mean
+  intensity first (simpler), and only fall back to puncta-based
+  `Dot_Density` calling if that separation is weak (<1) with a high
+  ambiguous fraction, the same symptom that motivated it originally.
 - **Don't assume a channel-to-antibody mapping carries over between
   datasets, even similar-looking ones, and don't assume either the folder
   name or the raw filename is automatically correct if they disagree.** One
