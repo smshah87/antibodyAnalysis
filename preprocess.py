@@ -254,8 +254,33 @@ def subtract_background(mip, radius=50):
     return corrected
 
 
-def process_one_image(tif_path, output_dir, rolling_ball_radius=50):
+def process_one_image(tif_path, output_dir, rolling_ball_radius=50, keep_raw=False):
+    """
+    By default, deletes tif_path once the preprocessed output has been
+    written successfully (to save disk space -- nothing downstream of this
+    function ever reads the raw file again, see the module docstring). Pass
+    keep_raw=True to disable this and preserve the raw file.
+
+    Deleting is safe to rely on across repeated runs: if tif_path is already
+    missing but its MAX_BGSUB_* output already exists (from an earlier run
+    that deleted it), that output is reused instead of failing -- the same
+    cache-skip pattern cell_analysis.py's segmentation uses, just one stage
+    earlier. If tif_path is missing AND there's no existing output to fall
+    back on, raises FileNotFoundError (something actually went wrong).
+    """
     name = os.path.splitext(os.path.basename(tif_path))[0]
+    out_path = os.path.join(output_dir, f"MAX_BGSUB_{name}.tif")
+
+    if not os.path.exists(tif_path):
+        if os.path.exists(out_path):
+            print(f"Processing {name} ... SKIPPED -- raw file not found (likely already deleted by "
+                  f"a prior run; pass --keep_raw to stop this), reusing existing "
+                  f"{os.path.basename(out_path)}")
+            return out_path
+        raise FileNotFoundError(
+            f"{tif_path} not found, and no existing preprocessed output at {out_path} to fall back on"
+        )
+
     print(f"Processing {name} ...")
 
     # is_ome/is_mmstack disabled: otherwise tifffile stitches every sibling
@@ -276,7 +301,6 @@ def process_one_image(tif_path, output_dir, rolling_ball_radius=50):
     corrected_16 = np.clip(corrected, 0, 65535).astype(np.uint16)
 
     pixel_size_um = get_pixel_size_um(tif_path)
-    out_path = os.path.join(output_dir, f"MAX_BGSUB_{name}.tif")
 
     px_per_um = 1.0 / pixel_size_um
     tifffile.imwrite(
@@ -289,6 +313,14 @@ def process_one_image(tif_path, output_dir, rolling_ball_radius=50):
                     # doesn't carry the resolution/unit through -- see _pixel_size_from_shaped_metadata
     )
     print(f"  -> saved {out_path}  shape={corrected_16.shape}  dtype={corrected_16.dtype}")
+
+    if not keep_raw:
+        try:
+            os.remove(tif_path)
+            print(f"  -> deleted raw file {tif_path} (pass --keep_raw to disable)")
+        except OSError as e:
+            print(f"  -> WARNING: could not delete raw file {tif_path}: {e}")
+
     return out_path
 
 
@@ -298,6 +330,14 @@ def main():
     parser.add_argument("--output_dir", required=True, help="Folder to save processed images into")
     parser.add_argument("--rolling_ball_radius", type=int, default=50, help="Rolling-ball kernel radius in pixels")
     parser.add_argument("--pattern", default="*.tif", help="Glob pattern for input files (default: *.tif)")
+    parser.add_argument("--keep_raw", action="store_true",
+                         help="Keep each raw file after its preprocessed output has been saved. By "
+                              "default (this flag off), raw files are DELETED once their MAX_BGSUB_*.tif "
+                              "output is saved, to save disk space -- nothing downstream of preprocessing "
+                              "ever reads the raw file again. Safe to delete across repeated runs: if a "
+                              "raw file is already deleted, its existing output is reused instead of "
+                              "failing. Pass this flag if you still need the raw files (e.g. archiving "
+                              "them elsewhere, or still tuning --rolling_ball_radius).")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -309,7 +349,10 @@ def main():
     processed_paths = []
     for tif_path in tif_files:
         try:
-            out_path = process_one_image(tif_path, args.output_dir, args.rolling_ball_radius)
+            out_path = process_one_image(
+                tif_path, args.output_dir, args.rolling_ball_radius,
+                keep_raw=args.keep_raw,
+            )
             processed_paths.append(out_path)
         except Exception as e:
             print(f"  FAILED on {tif_path}: {e}")

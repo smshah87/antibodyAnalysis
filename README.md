@@ -255,6 +255,7 @@ together.
 | `--input_dir` / `--output_dir` | Raw MMStack folder / where to save processed TIFFs | required |
 | `--rolling_ball_radius` | Rolling-ball background-subtraction radius, in pixels | 50 |
 | `--pattern` | Glob pattern for input files | `*.tif` |
+| `--keep_raw` | Keep each raw file after its `MAX_BGSUB_*.tif` output is saved. **By default (this flag off), raw files are DELETED** once preprocessed, to save disk space -- see "Raw files are deleted after preprocessing by default" below | off (raw files deleted) |
 
 **The rolling-ball engine is a faithful port of ImageJ/Fiji's actual "Subtract
 Background" algorithm** (`ij.plugin.filter.BackgroundSubtracter`), not
@@ -272,6 +273,33 @@ only to estimate the background, not applied to the output) and its
 radius-dependent shrink/downsample factor (1/2/4/8, chosen automatically from
 the radius, not a user-adjustable flag -- this is part of the algorithm
 itself in ImageJ, not a separate speed knob).
+
+#### Raw files are deleted after preprocessing by default (`--keep_raw` to disable)
+
+Once `process_one_image()` writes `MAX_BGSUB_*.tif`, nothing else in the
+pipeline ever reads the raw file again -- `cell_analysis.py` and
+`call_and_plot_positivity.py` are both always called with the preprocessed
+path, never the raw one. Raw multi-Z MMStack files are large (often far
+bigger than their max-projected, background-subtracted output), so **by
+default, each raw file is deleted right after its output is saved**, to
+reclaim disk space on a big batch.
+
+**This is irreversible -- pass `--keep_raw` if you need the raw files kept**,
+e.g. you're archiving them elsewhere first, or still deciding on
+`--rolling_ball_radius`, which can only be re-tuned by reprocessing the raw
+file.
+
+Deleting by default is safe across multiple runs on the same folder despite
+being irreversible per-file: if `preprocess.process_one_image()` is asked to
+process a raw file that's already been deleted, it checks for that file's
+`MAX_BGSUB_*.tif` output and reuses it instead of failing -- the same
+cache-skip pattern `cell_analysis.py`'s segmentation already uses, just one
+stage earlier. This means re-running `run_full_pipeline.py` on a folder with
+deleted raw files (to tweak `--channels`/`--compartment`/`--stat`, retry
+positivity calling, resume after an interruption, etc.) still works
+normally. It only fails loudly (`FileNotFoundError`) if a raw file is
+missing **and** there's no existing preprocessed output to fall back on --
+i.e. something actually went wrong, not just an expected deletion.
 
 ### cell_analysis.py
 

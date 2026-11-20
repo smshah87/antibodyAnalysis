@@ -130,6 +130,7 @@ def segment_one_image(raw_tif_path, args):
     preprocessed_path = preprocess.process_one_image(
         raw_tif_path, out_folder,
         rolling_ball_radius=args.rolling_ball_radius,
+        keep_raw=args.keep_raw,
     )
 
     processed_name = os.path.splitext(os.path.basename(preprocessed_path))[0]
@@ -216,6 +217,15 @@ def main():
 
     # preprocess.py options
     parser.add_argument("--rolling_ball_radius", type=int, default=50)
+    parser.add_argument("--keep_raw", action="store_true",
+                         help="Keep each raw file after its preprocessed MAX_BGSUB_*.tif has been saved. "
+                              "By default (this flag off), raw files are DELETED once preprocessed, "
+                              "since nothing downstream (segmentation, positivity calling) ever reads "
+                              "the raw file again. Safe to delete across repeated runs on the same "
+                              "folder: if a raw file is already deleted, its existing preprocessed "
+                              "output is reused instead of failing. Pass this flag if you still need the "
+                              "raw files (e.g. archiving them elsewhere, or still tuning "
+                              "--rolling_ball_radius, which can only be re-tuned from the raw file).")
 
     # cell_analysis.py options
     parser.add_argument("--cell_expansion_px", type=float, default=cell_analysis.CELL_EXPANSION_PX,
